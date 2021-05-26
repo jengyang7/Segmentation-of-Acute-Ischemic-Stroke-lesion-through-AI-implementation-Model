@@ -4,6 +4,11 @@ import numpy as np
 import pickle
 import glob
 import argparse
+import cv2
+import shutil
+import SimpleITK as sitk
+import nibabel
+
 
 # create Argument parser
 parser = argparse.ArgumentParser(
@@ -12,16 +17,21 @@ parser = argparse.ArgumentParser(
 parser.add_argument("--i", default="input", type=str,
                     help='Input image and xml directory')
 
+parser.add_argument("--t", default="label", type=str,
+                    help='True label')
+
 parser.add_argument("--o", default="output", type=str,
                     help='Output augmeneted image and xml directory.') 
 
 args = parser.parse_args()
 
 config = dict()
-config["output_folder"] = os.path.abspath("output/")  # outputs path
+# config["output_folder"] = os.path.abspath("output/")  # outputs path
+config["output_folder"] = os.path.abspath("gdrive/My Drive/code/output_2/")  # outputs path
 config["training_file"] = os.path.join(config["output_folder"], "training_ids.pkl")
 config["validation_file"] = os.path.join(config["output_folder"], "validation_ids.pkl")
-config["model_folder"] = os.path.abspath("model/")
+config["model_folder"] = os.path.join(config["output_folder"], "model")
+# config["model_folder"] = os.path.abspath("model/")
 if not os.path.exists(config["model_folder"]):
     os.makedirs(config["model_folder"])
 config["model_file"] = os.path.join(config["model_folder"], "model.h5")
@@ -40,25 +50,7 @@ config["mean"] = [144.85851701] # found mean from training data
 config["std"] = [530.26314967]  # # found sd from training data
 
 
-def weighted_dice_coefficient(y_true, y_pred, axis=(-3, -2, -1), smooth=0.00001):
-    return np.mean(2. * (np.sum(y_true * y_pred,
-                              axis=axis) + smooth/2)/(np.sum(y_true,
-                                                            axis=axis) + np.sum(y_pred,
-                                                                               axis=axis) + smooth))
-                             
-import numpy as np
-import cv2
-import os
-import glob
-import nibabel as nib
-import numpy as np
-
-
 ### Resize ###
-
-import shutil
-import numpy as np
-import SimpleITK as sitk
 
 def calculate_origin_offset(new_spacing, old_spacing):
     return np.subtract(new_spacing, old_spacing)/2
@@ -121,9 +113,9 @@ def resample_to_spacing(data, spacing, target_spacing, interpolation="linear", d
 
 class Resize:
     def __init__(self, new_shape,  interpolation="linear"):
-        self.new_shape = new_shape  # new shape of output image
-        self.interpolation = interpolation  #either "linear" ot "nearest"
-    def preprocess(self, image,):   #image : (np.array, 3 dims: x,y,z)
+        self.new_shape = new_shape  
+        self.interpolation = interpolation  
+    def preprocess(self, image,):   
         zoom_level = np.divide(self.new_shape, image.shape)
         new_spacing = np.divide((1.,1.,1.), zoom_level)
         new_data = resample_to_spacing(image, (1.,1.,1.), new_spacing, interpolation=self.interpolation)
@@ -161,10 +153,22 @@ def ModelLoader(model_file):
         else:
             raise error
 
+def weighted_dice_coefficient_predict(y_true, y_pred, axis=(-3, -2, -1), smooth=0.00001):
+    """
+    Weighted dice coefficient. Default axis assumes a "channels first" data structure
+    :param smooth:
+    :param y_true:
+    :param y_pred:
+    :param axis:
+    :return:
+    """
+    #print('weighted_dice_coefficient call')
+    return np.mean(2. * (np.sum(y_true * y_pred,
+                              axis=axis) + smooth/2)/(np.sum(y_true,
+                                                            axis=axis) + np.sum(y_pred,
+                                                                               axis=axis) + smooth))
 
-import nibabel
-
-def predict(filename, mean, std, model, output_filename):
+def predict(input_filename, mean, std, model, label_filename, output_filename):
     # load data
     preprocessors = [Resize(config["input_size"]+config["nr_slices"])] # prepare preprocessor for resizing
     # if the preprocessors are None, initialize them as an empty list
@@ -173,8 +177,8 @@ def predict(filename, mean, std, model, output_filename):
     # initialize the list of features and labels
     data = []
     images = [] 
-    print("filename: ", filename)
-    img = nib.load(filename).get_fdata()
+    print("filename1: ", input_filename)
+    img = nib.load(input_filename).get_fdata()
     # check if preprocessors are not None
     if preprocessors is not None:
         # loop over the preprocessors and apply to each image
@@ -198,7 +202,7 @@ def predict(filename, mean, std, model, output_filename):
     # mirror the output back
     prediction2 = np.flip(prediction2, axis=(1))
     # load CT image to get SMIR ID, original size, header and afiine
-    CT_path = filename  # get right header for SMIR
+    CT_path = input_filename  # get right header for SMIR
     CT = nib.load(CT_path)
     # transpose label mat to mask
     prediction = np.mean(np.array([prediction, prediction2]), axis=0)
@@ -217,18 +221,29 @@ def predict(filename, mean, std, model, output_filename):
     prediction_path = os.path.join(config["prediction_path"], output_filename)
     predNifti.to_filename(prediction_path)
 
+    label= nib.load(label_filename).get_fdata()
+    print("label_filename", label_filename)
+    print("label.shape before move: ", label.shape)
+    # label= np.moveaxis(label,0,2)
+    # print("label.shape after move: ", label.shape)
+
+
+    dice = weighted_dice_coefficient_predict(label, prediction)
+    print("Dice: ", dice)
+
 def main():
     dice = []
     # load model and wieghts
     model = ModelLoader(config["model_file"])
     model.load_weights(config["weights_file"])
-
+    
     input_image = args.i
+    label = args.t
     output_image = args.o
     print("output_image_shape", output_image)
 
     # call predict function
-    predict(input_image, config["mean"], config["std"], model, output_image)
+    predict(input_image, config["mean"], config["std"], model, label, output_image)
 
 if __name__ == "__main__":
     main()
