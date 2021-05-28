@@ -1,5 +1,5 @@
 from keras.models import load_model
-from utils import weighted_dice_coefficient_loss
+from tools import weighted_dice_coefficient_loss
 
 def Model_loader(model_file):
     print("Loading model")

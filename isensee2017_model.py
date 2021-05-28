@@ -4,7 +4,7 @@ from keras.engine import Model
 from functools import partial
 
 from .unet import create_convolution_block, concatenate
-from utils import weighted_dice_coefficient_loss
+from tools import weighted_dice_coefficient_loss
 
 activation_function = LeakyReLU
 rate = (1,1,1)

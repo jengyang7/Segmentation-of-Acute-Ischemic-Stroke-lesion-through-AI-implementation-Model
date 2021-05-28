@@ -1,6 +1,6 @@
 import shutil
 import numpy as np
-from .sitk_utils import resample_to_spacing, calculate_origin_offset
+from .sitk import resample_to_spacing, calculate_origin_offset
 
 class Resize:
     def __init__(self, new_image_shape, interpolation="linear"): # interpolation can be ‘continuous’, ‘linear’, or ‘nearest’. we use linear as default

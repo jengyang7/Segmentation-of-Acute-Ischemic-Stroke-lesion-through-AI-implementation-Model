@@ -90,8 +90,8 @@ testY = tf.stack(testY)
 
 # create or load model
 if os.path.exists(config["model_file"]):
-    from utils import ModelLoader
-    model = ModelLoader(config["model_file"])
+    from tools import Model_loader
+    model = Model_loader(config["model_file"])
 
 else:
     input_shape=(len(config["modalities"]),)+config["input_size"]+config["nr_slices"]
